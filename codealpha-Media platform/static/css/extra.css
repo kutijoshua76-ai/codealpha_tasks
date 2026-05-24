@@ -1,0 +1,36 @@
+/* ── Extra / Supplemental Styles ───────────────────────────
+   Only styles NOT already defined in style.css live here.
+   Loaded conditionally via {% block extra_css %}.
+──────────────────────────────────────────────────────────── */
+
+/* Smooth slide-in for comment panel */
+@keyframes slideInRight {
+    from { transform: translateX(100%); }
+    to   { transform: translateX(0); }
+}
+.comment-panel:not(.hidden) {
+    animation: slideInRight 0.25s ease-out;
+}
+
+/* Reel card entrance fade */
+@keyframes reelFadeIn {
+    from { opacity: 0; transform: scale(0.97); }
+    to   { opacity: 1; transform: scale(1); }
+}
+.reel-card {
+    animation: reelFadeIn 0.4s ease-out;
+}
+
+/* Pulse glow on live badge */
+@keyframes liveGlow {
+    0%, 100% { box-shadow: 0 0 6px rgba(255,71,87,0.6); }
+    50%       { box-shadow: 0 0 18px rgba(255,71,87,1); }
+}
+.live-badge, .live-badge-red {
+    animation: pulse 1.5s infinite, liveGlow 2s infinite;
+}
+
+/* Responsive: hide discovery sidebar on medium screens */
+@media (max-width: 900px) {
+    .floating-add { bottom: 1rem; left: 1rem; width: 52px; height: 52px; font-size: 1.2rem; }
+}

@@ -1,0 +1,122 @@
+{% extends 'core/base.html' %}
+{% block title %}{{ stream.title }} – Broadcasting – VibeNet{% endblock %}
+
+{% block content %}
+<div class="live-page">
+    <div class="live-wrapper">
+        <div class="live-header glass">
+            <div>
+                <span class="live-badge-red">● LIVE</span>
+                <strong>{{ stream.title }}</strong>
+            </div>
+            <a href="{% url 'end_stream' stream.id %}" class="end-stream-btn">End Stream</a>
+        </div>
+
+        <div class="live-layout">
+            <div class="live-video-col">
+                <video id="local-video" autoplay muted class="live-video"></video>
+                <div class="live-controls">
+                    <button id="toggle-mic" class="btn-primary" onclick="toggleMic()">
+                        <i class="fas fa-microphone"></i> Mute Mic
+                    </button>
+                    <button id="toggle-cam" class="btn-secondary" onclick="toggleCam()">
+                        <i class="fas fa-video"></i> Stop Camera
+                    </button>
+                </div>
+            </div>
+
+            <div class="live-chat glass">
+                <div class="chat-header">💬 Live Chat</div>
+                <div id="chat-messages" class="chat-messages"></div>
+                <div class="chat-input-row">
+                    <input type="text" id="chat-input" class="chat-input" placeholder="Say something…" title="Chat message">
+                    <button onclick="sendChat()" class="btn-primary p-05">→</button>
+                </div>
+            </div>
+        </div>
+
+        <p class="stream-url-note">
+            Share this link: <strong>{{ request.build_absolute_uri }}</strong>
+        </p>
+    </div>
+</div>
+
+<script>
+const streamId = "{{ stream.id }}";
+const ws = new WebSocket(`ws://${window.location.host}/ws/stream/${streamId}/`);
+let localStream = null;
+let peerConnections = {};
+let micOn = true, camOn = true;
+const iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+async function startCamera() {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    document.getElementById('local-video').srcObject = localStream;
+}
+
+ws.onopen = async () => {
+    await startCamera();
+    ws.send(JSON.stringify({ type: 'broadcaster-ready' }));
+};
+
+ws.onmessage = async (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === 'viewer-joined') {
+        await createOfferForViewer(data.viewerId);
+    } else if (data.type === 'answer') {
+        const pc = peerConnections[data.viewerId];
+        if (pc) await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+    } else if (data.type === 'ice-candidate') {
+        const pc = peerConnections[data.viewerId];
+        if (pc) await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+    } else if (data.type === 'chat') {
+        addChatMessage(data.username, data.message);
+    }
+};
+
+async function createOfferForViewer(viewerId) {
+    const pc = new RTCPeerConnection(iceConfig);
+    peerConnections[viewerId] = pc;
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    pc.onicecandidate = (e) => {
+        if (e.candidate) ws.send(JSON.stringify({ type: 'ice-candidate', viewerId, candidate: e.candidate }));
+    };
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    ws.send(JSON.stringify({ type: 'offer', viewerId, sdp: offer }));
+}
+
+function toggleMic() {
+    micOn = !micOn;
+    localStream.getAudioTracks().forEach(t => t.enabled = micOn);
+    document.getElementById('toggle-mic').innerHTML =
+        `<i class="fas fa-microphone${micOn ? '' : '-slash'}"></i> ${micOn ? 'Mute Mic' : 'Unmute Mic'}`;
+}
+
+function toggleCam() {
+    camOn = !camOn;
+    localStream.getVideoTracks().forEach(t => t.enabled = camOn);
+    document.getElementById('toggle-cam').innerHTML =
+        `<i class="fas fa-video${camOn ? '' : '-slash'}"></i> ${camOn ? 'Stop Camera' : 'Start Camera'}`;
+}
+
+function addChatMessage(username, message) {
+    const box = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'chat-msg';
+    div.innerHTML = `<span class="chat-msg-name">${username}</span>: ${message}`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+}
+
+function sendChat() {
+    const input = document.getElementById('chat-input');
+    if (!input.value.trim()) return;
+    ws.send(JSON.stringify({ type: 'chat', username: '{{ request.user.username }}', message: input.value }));
+    addChatMessage('You', input.value);
+    input.value = '';
+}
+
+document.getElementById('chat-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+</script>
+{% endblock %}

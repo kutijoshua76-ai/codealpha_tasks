@@ -1,0 +1,744 @@
+{% extends 'core/base.html' %}
+{% load static %}
+{% block title %}Explore – VibeNet{% endblock %}
+{% block meta_description %}Watch trending videos and posts from the VibeNet community.{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* body { overflow: hidden; } */
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Sort Toggle Bar ─────────────────────────────────────────── -->
+<div class="sort-bar" id="sort-bar">
+    <a href="?sort=trending" class="sort-btn {% if active_sort == 'trending' %}active{% endif %}" id="sort-trending">
+        <i class="fas fa-fire"></i> Trending
+    </a>
+    <a href="?sort=latest" class="sort-btn {% if active_sort == 'latest' %}active{% endif %}" id="sort-latest">
+        <i class="fas fa-clock"></i> Latest
+    </a>
+</div>
+
+<!-- ── Reels Feed ─────────────────────────────────────────────── -->
+<div class="reels-feed" id="reels-feed">
+
+    <!-- Server-rendered first batch -->
+    {% for post in posts %}
+    <div class="reel-card" id="post-{{ post.id }}">
+        <div class="reel-video-container" onclick="togglePlayReel(this)">
+            {% if post.video %}
+                <video src="{{ post.video.url }}" class="reel-video" loop muted playsinline webkit-playsinline></video>
+                <div class="muted-hint">
+                    <i class="fas fa-volume-mute"></i> Tap for sound
+                </div>
+            {% elif post.image %}
+                <img src="{{ post.image.url }}" class="reel-video" alt="Post by {{ post.author.username }}">
+            {% else %}
+                <div class="reel-video flex-center p-2 text-center">
+                    <p>{{ post.content }}</p>
+                </div>
+            {% endif %}
+
+            <!-- Play/Pause Indicator -->
+            <div class="play-pause-indicator">
+                <i class="fas fa-play"></i>
+            </div>
+
+            <!-- Overlay UI -->
+            <div class="reel-overlay">
+                <div class="reel-info">
+                    <div class="reel-author">
+                        <a href="{% url 'profile' post.author.username %}" class="reel-info-link" title="View {{ post.author.username }}'s profile">
+                            <img src="{{ post.author.profile.profile_pic.url }}" class="reel-avatar" alt="{{ post.author.username }}">
+                        </a>
+                        <a href="{% url 'profile' post.author.username %}" class="reel-username">@{{ post.author.username }}</a>
+                        {% if user != post.author %}
+                            <button class="reel-follow-btn {% if user.profile in post.author.profile.followers.all %}following{% endif %}"
+                                    onclick="followUserReel('{{ post.author.username }}', this, event)">
+                                {% if user.profile in post.author.profile.followers.all %}Following{% else %}Follow{% endif %}
+                            </button>
+                        {% endif %}
+                    </div>
+                    <p class="reel-caption">{{ post.content|truncatechars:150 }}</p>
+                </div>
+
+                <div class="reel-actions">
+                    <div class="reel-action-item reel-mute-btn-container" onclick="toggleMute(event, this)" title="Toggle Mute">
+                        <i class="fas fa-volume-mute"></i>
+                        <span>Sound</span>
+                    </div>
+                    <div class="reel-action-item {% if user in post.likes.all %}liked{% endif %}" onclick="likePostReel('{{ post.id }}', this, event)">
+                        <i class="{% if user in post.likes.all %}fas{% else %}far{% endif %} fa-heart"></i>
+                        <span class="like-count">{{ post.likes.count }}</span>
+                    </div>
+                    <div class="reel-action-item" onclick="showCommentsReel('{{ post.id }}', event)">
+                        <i class="far fa-comment"></i>
+                        <span>{{ post.comments.count }}</span>
+                    </div>
+                    <div class="reel-action-item" onclick="sharePost('{{ post.id }}', event)">
+                        <i class="far fa-paper-plane"></i>
+                        <span>Share</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="reel-card flex-center text-center" id="empty-feed">
+        <div class="empty-state">
+            <div class="empty-icon">🎬</div>
+            <h3>No posts yet</h3>
+            <p class="text-muted mt-05">Be the first to share a vibe!</p>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Infinite scroll sentinel -->
+    <div id="scroll-sentinel" class="reel-sentinel">
+        <div class="sentinel-spinner hidden" id="sentinel-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+        </div>
+        <p class="sentinel-end hidden" id="sentinel-end">
+            <i class="fas fa-check-circle"></i> You've seen it all!
+        </p>
+    </div>
+
+</div>
+
+<!-- ── Suggested Users Sidebar ───────────────────────────────── -->
+<div class="discovery-container">
+    <div class="discovery-card glass">
+        <h3 class="discovery-title"><i class="fas fa-user-plus"></i> Suggested for you</h3>
+        {% for profile in suggested_profiles %}
+        <div class="suggested-user">
+            <a href="{% url 'profile' profile.user.username %}" class="suggested-info">
+                <img src="{{ profile.profile_pic.url }}" class="suggested-avatar" alt="{{ profile.user.username }}">
+                <span class="suggested-name">{{ profile.user.username }}</span>
+            </a>
+            <button class="btn-primary p-05" onclick="followUserReel('{{ profile.user.username }}', this, event)">Follow</button>
+        </div>
+        {% empty %}
+        <p class="text-muted">You're all caught up!</p>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- ── Floating Post Button ──────────────────────────────────── -->
+<a href="#" class="btn-primary floating-add" title="Create new post" onclick="const b=document.body; if(b.getAttribute('data-authenticated')==='true'){document.getElementById('post-modal').classList.remove('hidden');}else{window.location.href=b.getAttribute('data-signup-url');}">
+    <i class="fas fa-plus"></i>
+</a>
+
+<!-- ── Post Modal ─────────────────────────────────────────────── -->
+<div id="post-modal" class="modal-overlay hidden">
+    <div class="modal-content glass">
+        <h3>Create Post</h3>
+        <form action="{% url 'create_post' %}" method="POST" enctype="multipart/form-data">
+            {% csrf_token %}
+            <textarea name="content" class="form-input mt-1" placeholder="What's the vibe?" rows="4"></textarea>
+            <div class="upload-options mt-1">
+                <label for="img-up"><i class="far fa-image"></i> Image</label>
+                <input type="file" id="img-up" name="image" accept="image/*" hidden>
+                <label for="vid-up"><i class="fas fa-video"></i> Video</label>
+                <input type="file" id="vid-up" name="video" accept="video/*" hidden>
+            </div>
+            <div id="upload-preview" class="upload-preview hidden"></div>
+            <div class="mt-1 flex-gap">
+                <button type="submit" class="btn-primary">Post Now</button>
+                <button type="button" class="btn-secondary"
+                        onclick="document.getElementById('post-modal').classList.add('hidden')">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ── Comment Sidebar ────────────────────────────────────────── -->
+<div id="comment-panel" class="comment-panel hidden">
+    <div class="comment-panel-header">
+        <h3>Comments</h3>
+        <button onclick="hideCommentsReel()" class="close-btn">&times;</button>
+    </div>
+    <div id="panel-comment-list" class="panel-comment-list"></div>
+    <div class="panel-input-row">
+        <input type="text" id="panel-input" class="comment-input" placeholder="Add a comment…" title="Comment">
+        <button id="panel-send-btn" class="btn-primary p-05" onclick="addCommentReel()">→</button>
+    </div>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────
+let currentCommentPostId = null;
+let feedPage             = 2;   // page 1 already rendered server-side
+let feedLoading          = false;
+let feedExhausted        = false;
+let isGlobalMuted        = true; // Start muted for autoplay compatibility
+const feedSort           = new URLSearchParams(window.location.search).get('sort') || 'trending';
+
+// ── Comment Panel ─────────────────────────────────────────────────
+function showCommentsReel(postId, event) {
+    if (event) event.stopPropagation();
+    currentCommentPostId = postId;
+    const panel = document.getElementById('comment-panel');
+    const list  = document.getElementById('panel-comment-list');
+    list.innerHTML = '<p class="text-center p-2"><i class="fas fa-spinner fa-spin"></i> Loading…</p>';
+    panel.classList.remove('hidden');
+
+    fetch(`/post/${postId}/comments/`, {
+        headers: { 'X-CSRFToken': getCookie('csrftoken') }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.comments.length === 0) {
+            list.innerHTML = '<p class="text-center p-2 text-muted">No comments yet. Be the first!</p>';
+            return;
+        }
+        list.innerHTML = '';
+        data.comments.forEach(c => {
+            const div = document.createElement('div');
+            div.className = 'comment-entry';
+            div.innerHTML = `<span class="comment-username">${c.author}</span>: ${c.text}<small class="comment-time">${c.created_at}</small>`;
+            list.appendChild(div);
+        });
+        list.scrollTop = list.scrollHeight;
+    })
+    .catch(() => {
+        list.innerHTML = '<p class="text-center p-2 text-muted">Could not load comments.</p>';
+    });
+}
+
+function hideCommentsReel() {
+    document.getElementById('comment-panel').classList.add('hidden');
+}
+
+function addCommentReel() {
+    if (document.body.getAttribute('data-authenticated') !== 'true') {
+        window.location.href = document.body.getAttribute('data-signup-url');
+        return;
+    }
+    const input = document.getElementById('panel-input');
+    const text  = input.value.trim();
+    if (!text || !currentCommentPostId) return;
+
+    const fd = new FormData();
+    fd.append('text', text);
+
+    fetch(`/post/${currentCommentPostId}/comment/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        body: fd
+    })
+    .then(r => r.json())
+    .then(data => {
+        const list = document.getElementById('panel-comment-list');
+        // Remove "no comments" placeholder if present
+        if (list.querySelector('.text-muted')) list.innerHTML = '';
+        const div = document.createElement('div');
+        div.className = 'comment-entry';
+        div.innerHTML = `<span class="comment-username">${data.author}</span>: ${data.text}<small class="comment-time">${data.created_at}</small>`;
+        list.appendChild(div);
+        input.value = '';
+        list.scrollTop = list.scrollHeight;
+    });
+};
+
+document.getElementById('panel-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') addCommentReel();
+});
+
+// ── Video Autoplay (Intersection Observer) ────────────────────────
+const autoplayObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        const video = entry.target.querySelector('video');
+        if (!video) return;
+        if (entry.isIntersecting && video.dataset.manuallyPaused !== 'true') {
+            video.muted = isGlobalMuted;
+            video.volume = isGlobalMuted ? 0 : 1.0;
+            video.play().catch(e => {
+                if (!video.muted) {
+                    video.muted = true;
+                    video.play().catch(() => {});
+                }
+            });
+            updateMuteIcons();
+        } else if (!entry.isIntersecting) {
+            video.pause();
+        }
+    });
+}, { threshold: 0.7 });
+
+function observeCard(card) {
+    autoplayObserver.observe(card);
+}
+
+document.querySelectorAll('.reel-card').forEach(observeCard);
+
+function togglePlayReel(container) {
+    const video = container.querySelector('video');
+    if (!video) return;
+
+    const indicator = container.querySelector('.play-pause-indicator');
+    const icon = indicator.querySelector('i');
+
+    // If first interaction, unmute globally
+    if (isGlobalMuted) {
+        toggleMute(null, null); // Unmute but we will handle the play/pause state ourselves
+    }
+    
+    // Toggle state
+    if (video.paused) {
+        video.play().catch(() => {});
+        video.dataset.manuallyPaused = 'false';
+        icon.className = 'fas fa-play';
+    } else {
+        video.pause();
+        video.dataset.manuallyPaused = 'true';
+        icon.className = 'fas fa-pause';
+    }
+
+    // Show indicator animation
+    indicator.classList.remove('animate');
+    void indicator.offsetWidth; 
+    indicator.classList.add('animate');
+}
+
+function toggleMute(event, btn) {
+    if (event) event.stopPropagation();
+    isGlobalMuted = !isGlobalMuted;
+    
+    const videos = document.querySelectorAll('video.reel-video');
+    videos.forEach(v => {
+        v.muted = isGlobalMuted;
+        v.volume = isGlobalMuted ? 0 : 1.0;
+        
+        if (!isGlobalMuted) {
+            v.removeAttribute('muted');
+        } else {
+            v.setAttribute('muted', 'true');
+        }
+    });
+
+    updateMuteIcons();
+    showToast(isGlobalMuted ? "Sound Off" : "Sound On");
+}
+
+function updateMuteIcons() {
+    const iconClass = isGlobalMuted ? 'fa-volume-mute' : 'fa-volume-up';
+    const soundText = isGlobalMuted ? 'Unmute' : 'Mute';
+    
+    document.querySelectorAll('.reel-mute-btn-container').forEach(container => {
+        const icon = container.querySelector('i');
+        const span = container.querySelector('span');
+        if (icon) icon.className = `fas ${iconClass}`;
+        if (span) span.innerText = soundText;
+    });
+
+    // Toggle hint visibility
+    document.querySelectorAll('.reel-video-container').forEach(container => {
+        if (isGlobalMuted) container.classList.add('is-muted');
+        else container.classList.remove('is-muted');
+    });
+}
+
+// Initial state for server-rendered videos
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('video.reel-video').forEach(v => {
+        v.muted = isGlobalMuted;
+        v.volume = isGlobalMuted ? 0 : 1;
+    });
+});
+
+// ── Infinite Scroll ───────────────────────────────────────────────
+function buildReelCard(post) {
+    const card = document.createElement('div');
+    card.className = 'reel-card';
+    card.id = `post-${post.id}`;
+
+    let mediaHTML = '';
+    if (post.video) {
+        mediaHTML = `<video src="${post.video}" class="reel-video" loop ${isGlobalMuted ? 'muted' : ''} playsinline webkit-playsinline></video>`;
+    } else if (post.image) {
+        mediaHTML = `<img src="${post.image}" class="reel-video" alt="Post by ${post.author}">`;
+    } else {
+        mediaHTML = `<div class="reel-video flex-center p-2 text-center"><p>${post.content}</p></div>`;
+    }
+
+    const likedClass = post.liked ? 'liked' : '';
+    const heartIcon  = post.liked ? 'fas fa-heart' : 'far fa-heart';
+
+    card.innerHTML = `
+    <div class="reel-video-container ${isGlobalMuted ? 'is-muted' : ''}" onclick="togglePlayReel(this)">
+        ${mediaHTML}
+        <div class="muted-hint">
+            <i class="fas fa-volume-mute"></i> Tap for sound
+        </div>
+        <!-- Play/Pause Indicator -->
+        <div class="play-pause-indicator">
+            <i class="fas fa-play"></i>
+        </div>
+        <div class="reel-overlay">
+            <div class="reel-info">
+                <div class="reel-author">
+                    <a href="/profile/${post.author}/" class="reel-info-link" title="View ${post.author}'s profile">
+                        <img src="${post.profile_pic}" class="reel-avatar" alt="${post.author}">
+                    </a>
+                    <a href="/profile/${post.author}/" class="reel-username">@${post.author}</a>
+                    <button class="reel-follow-btn" onclick="followUserReel('${post.author}', this, event)">Follow</button>
+                </div>
+                <p class="reel-caption">${post.content.substring(0, 150)}${post.content.length > 150 ? '…' : ''}</p>
+            </div>
+            <div class="reel-actions">
+                <div class="reel-action-item reel-mute-btn-container" onclick="toggleMute(event, this)" title="Toggle Mute">
+                    <i class="fas ${isGlobalMuted ? 'fa-volume-mute' : 'fa-volume-up'}"></i>
+                    <span>Sound</span>
+                </div>
+                <div class="reel-action-item ${likedClass}" onclick="likePostReel('${post.id}', this, event)">
+                    <i class="${heartIcon}"></i>
+                    <span class="like-count">${post.like_count}</span>
+                </div>
+                <div class="reel-action-item" onclick="showCommentsReel('${post.id}', event)">
+                    <i class="far fa-comment"></i>
+                    <span>${post.comment_count}</span>
+                </div>
+                <div class="reel-action-item" onclick="sharePost('${post.id}', event)">
+                    <i class="far fa-paper-plane"></i>
+                    <span>Share</span>
+                </div>
+            </div>
+        </div>
+    </div>`;
+
+    return card;
+}
+
+function loadMorePosts() {
+    if (feedLoading || feedExhausted) return;
+    feedLoading = true;
+
+    document.getElementById('sentinel-spinner').classList.remove('hidden');
+
+    fetch(`/feed/?sort=${feedSort}&page=${feedPage}`, {
+        headers: { 'X-CSRFToken': getCookie('csrftoken') }
+    })
+    .then(r => r.json())
+    .then(data => {
+        const feed     = document.getElementById('reels-feed');
+        const sentinel = document.getElementById('scroll-sentinel');
+
+        data.posts.forEach(post => {
+            const card = buildReelCard(post);
+            feed.insertBefore(card, sentinel);
+            observeCard(card);          // enable autoplay for new cards
+        });
+
+        feedPage++;
+        if (!data.has_more) {
+            feedExhausted = true;
+            document.getElementById('sentinel-spinner').classList.add('hidden');
+            document.getElementById('sentinel-end').classList.remove('hidden');
+        } else {
+            document.getElementById('sentinel-spinner').classList.add('hidden');
+        }
+        feedLoading = false;
+    })
+    .catch(() => { feedLoading = false; });
+}
+
+// Watch the sentinel with IntersectionObserver to trigger load
+const sentinelObserver = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting) loadMorePosts();
+}, { threshold: 0.1 });
+
+sentinelObserver.observe(document.getElementById('scroll-sentinel'));
+
+// ── Like ──────────────────────────────────────────────────────────
+function likePostReel(postId, btn, event) {
+    if (event) event.stopPropagation();
+    if (document.body.getAttribute('data-authenticated') !== 'true') {
+        window.location.href = document.body.getAttribute('data-signup-url');
+        return;
+    }
+    fetch(`/post/${postId}/like/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        const icon  = btn.querySelector('i');
+        const count = btn.querySelector('.like-count');
+        if (data.liked) {
+            btn.classList.add('liked');
+            icon.classList.replace('far', 'fas');
+        } else {
+            btn.classList.remove('liked');
+            icon.classList.replace('fas', 'far');
+        }
+        count.innerText = data.count;
+    });
+}
+
+// ── Follow ────────────────────────────────────────────────────────
+function followUserReel(username, btn, event) {
+    if (event) event.stopPropagation();
+    if (document.body.getAttribute('data-authenticated') !== 'true') {
+        window.location.href = document.body.getAttribute('data-signup-url');
+        return;
+    }
+    fetch(`/follow/${username}/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.following) {
+            btn.innerText = 'Following';
+            btn.classList.add('following');
+        } else {
+            btn.innerText = 'Follow';
+            btn.classList.remove('following');
+        }
+    });
+}
+
+// ── Share ─────────────────────────────────────────────────────────
+function sharePost(postId, event) {
+    if (event) event.stopPropagation();
+    const url = window.location.origin + window.location.search + '#post-' + postId;
+    if (navigator.share) {
+        navigator.share({ title: 'VibeNet', url });
+    } else {
+        navigator.clipboard.writeText(url).then(() => {
+            showToast('Link copied to clipboard!');
+        });
+    }
+}
+
+// ── Toast Notification ────────────────────────────────────────────
+function showToast(msg) {
+    let toast = document.getElementById('vn-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'vn-toast';
+        toast.className = 'vn-toast';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// ── File upload preview ───────────────────────────────────────────
+document.getElementById('img-up').addEventListener('change', function() {
+    showUploadPreview(this.files[0], 'image');
+});
+document.getElementById('vid-up').addEventListener('change', function() {
+    showUploadPreview(this.files[0], 'video');
+});
+
+function showUploadPreview(file, type) {
+    if (!file) return;
+    const preview = document.getElementById('upload-preview');
+    preview.innerHTML = '';
+    preview.classList.remove('hidden');
+    const url = URL.createObjectURL(file);
+    if (type === 'image') {
+        preview.innerHTML = `<img src="${url}" class="upload-thumb" alt="Preview">`;
+    } else {
+        preview.innerHTML = `<video src="${url}" class="upload-thumb" muted controls></video>`;
+    }
+}
+</script>
+
+<style>
+/* ── Sort Toggle Bar ─────────────────────────────────────── */
+.sort-bar {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 900;
+    display: flex;
+    gap: 0.5rem;
+    background: rgba(10,10,10,0.75);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 30px;
+    padding: 0.35rem 0.5rem;
+}
+
+.sort-btn {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.35rem 1rem;
+    border-radius: 20px;
+    transition: 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.sort-btn:hover { color: white; }
+
+.sort-btn.active {
+    background: var(--primary);
+    color: white;
+}
+
+/* ── Sentinel / Loader ───────────────────────────────────── */
+.reel-sentinel {
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+}
+
+.sentinel-end {
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-muted);
+}
+
+/* ── Comment Panel ───────────────────────────────────────── */
+.comment-panel {
+    position: fixed;
+    right: 0; top: 0; width: 350px; height: 100vh;
+    background: #111;
+    border-left: 1px solid var(--glass-border);
+    z-index: 2100;
+    display: flex; flex-direction: column;
+    transition: transform 0.3s ease-in-out;
+}
+.comment-panel.hidden { transform: translateX(100%); display: flex !important; }
+.comment-panel-header { padding: 1.5rem; border-bottom: 1px solid var(--glass-border); display: flex; justify-content: space-between; align-items: center; }
+.close-btn { background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; }
+.panel-comment-list { flex: 1; overflow-y: auto; padding: 1.5rem; }
+.panel-input-row { padding: 1.5rem; border-top: 1px solid var(--glass-border); display: flex; gap: 0.5rem; }
+
+/* ── Post Modal ──────────────────────────────────────────── */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.8);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 2000;
+}
+.modal-content { width: 90%; max-width: 500px; padding: 2rem; }
+
+/* ── Floating Add Button ─────────────────────────────────── */
+.floating-add {
+    position: fixed;
+    bottom: 2rem; left: 2rem;
+    width: 60px; height: 60px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    box-shadow: 0 10px 20px rgba(138,43,226,0.4);
+    z-index: 100;
+}
+
+/* ── Upload Preview ──────────────────────────────────────── */
+.upload-preview { margin-top: 1rem; }
+.upload-thumb { max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: contain; }
+
+/* ── Toast ───────────────────────────────────────────────── */
+.vn-toast {
+    position: fixed;
+    bottom: 6rem; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: rgba(255,255,255,0.1);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    color: white;
+    padding: 0.7rem 1.5rem;
+    border-radius: 30px;
+    font-size: 0.9rem;
+    opacity: 0;
+    transition: opacity 0.3s, transform 0.3s;
+    z-index: 9999;
+    pointer-events: none;
+}
+.vn-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── Misc ────────────────────────────────────────────────── */
+.flex-gap { display: flex; gap: 1rem; }
+.flex-center { display: flex; align-items: center; justify-content: center; }
+.mt-05 { margin-top: 0.5rem; }
+
+/* Empty State */
+.empty-state .empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+/* Mute Button (Integrated in Actions) */
+.reel-mute-btn-container i {
+    font-size: 1.8rem !important; /* Match other reel action icons */
+}
+.reel-mute-btn-container {
+    transition: transform 0.1s;
+}
+.reel-mute-btn-container:active { transform: scale(0.9); }
+
+/* Muted Overlay Hint */
+.muted-hint {
+    position: absolute;
+    top: 1.5rem;
+    left: 1.5rem;
+    background: rgba(0,0,0,0.6);
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    z-index: 20;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    -webkit-backdrop-filter: blur(5px);
+    backdrop-filter: blur(5px);
+}
+.reel-video-container.is-muted .muted-hint {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    opacity: 1;
+}
+
+/* Play/Pause Indicator */
+.play-pause-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    background: rgba(0,0,0,0.4);
+    color: white;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    z-index: 20;
+    pointer-events: none;
+    opacity: 0;
+}
+
+.play-pause-indicator.animate {
+    animation: ping 0.5s ease-out;
+}
+
+@keyframes ping {
+    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+    50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+}
+</style>
+
+{% endblock %}

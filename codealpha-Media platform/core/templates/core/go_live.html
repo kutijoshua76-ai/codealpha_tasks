@@ -1,0 +1,22 @@
+{% extends 'core/base.html' %}
+{% block title %}Go Live – VibeNet{% endblock %}
+
+{% block content %}
+<div class="go-live-page">
+    <div class="go-live-card glass">
+        <h2>🔴 Go Live</h2>
+        <p class="go-live-subtitle">Share your moment with the world in real-time.</p>
+        <form method="POST">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="stream-title">Stream Title</label>
+                <input type="text" id="stream-title" name="title" class="form-input"
+                    title="Stream title" placeholder="What are you streaming?" required>
+            </div>
+            <button type="submit" class="btn-primary w-full">
+                <i class="fas fa-broadcast-tower"></i> Start Streaming
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

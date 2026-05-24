@@ -1,0 +1,92 @@
+{% extends 'core/base.html' %}
+{% block title %}{{ stream.title }} – Watch – VibeNet{% endblock %}
+
+{% block content %}
+<div class="live-page">
+    <div class="live-wrapper">
+        <div class="live-header glass">
+            <div>
+                <span class="live-badge-red">● LIVE</span>
+                <strong>{{ stream.title }}</strong>
+                <span class="live-host-label">by @{{ stream.host.username }}</span>
+            </div>
+            <span class="viewer-count" id="viewer-count">
+                <i class="fas fa-eye"></i> {{ stream.viewers.count }} watching
+            </span>
+        </div>
+
+        <div class="live-layout">
+            <div class="live-video-col">
+                <video id="remote-video" autoplay class="live-video"></video>
+                <div id="stream-status" class="stream-status">
+                    <i class="fas fa-spinner fa-spin"></i> Connecting to stream…
+                </div>
+            </div>
+
+            <div class="live-chat glass">
+                <div class="chat-header">💬 Live Chat</div>
+                <div id="chat-messages" class="chat-messages"></div>
+                <div class="chat-input-row">
+                    <input type="text" id="chat-input" class="chat-input" placeholder="Say something…" title="Chat message">
+                    <button onclick="sendChat()" class="btn-primary p-05">→</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const streamId = "{{ stream.id }}";
+const myViewerId = Math.random().toString(36).substr(2, 9);
+const ws = new WebSocket(`ws://${window.location.host}/ws/stream/${streamId}/`);
+const iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+let pc = null;
+
+ws.onopen = () => {
+    ws.send(JSON.stringify({ type: 'viewer-joined', viewerId: myViewerId }));
+};
+
+ws.onmessage = async (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === 'offer') {
+        pc = new RTCPeerConnection(iceConfig);
+        pc.ontrack = (e) => {
+            document.getElementById('remote-video').srcObject = e.streams[0];
+            document.getElementById('stream-status').innerHTML = '🟢 Connected';
+        };
+        pc.onicecandidate = (e) => {
+            if (e.candidate) ws.send(JSON.stringify({ type: 'ice-candidate', viewerId: myViewerId, candidate: e.candidate }));
+        };
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        ws.send(JSON.stringify({ type: 'answer', viewerId: data.viewerId, sdp: answer }));
+    } else if (data.type === 'ice-candidate' && pc) {
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+    } else if (data.type === 'peer-disconnected') {
+        document.getElementById('stream-status').innerHTML = '🔴 Stream ended';
+    } else if (data.type === 'chat') {
+        addChatMessage(data.username, data.message);
+    }
+};
+
+function addChatMessage(username, message) {
+    const box = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'chat-msg';
+    div.innerHTML = `<span class="chat-msg-name">${username}</span>: ${message}`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+}
+
+function sendChat() {
+    const input = document.getElementById('chat-input');
+    if (!input.value.trim()) return;
+    ws.send(JSON.stringify({ type: 'chat', username: '{{ request.user.username }}', message: input.value }));
+    addChatMessage('You', input.value);
+    input.value = '';
+}
+
+document.getElementById('chat-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+</script>
+{% endblock %}

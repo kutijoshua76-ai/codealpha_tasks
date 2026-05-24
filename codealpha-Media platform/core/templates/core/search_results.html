@@ -1,0 +1,172 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Search results for "{{ query }}" – VibeNet{% endblock %}
+
+{% block content %}
+<div class="main-container">
+    <div class="search-header">
+        <h1>Results for "{{ query }}"</h1>
+        <p class="text-muted">{{ profiles|length }} users found • {{ posts|length }} vibes found</p>
+    </div>
+
+    <!-- ── Users Section ────────────────────────────────────────── -->
+    <section class="results-section">
+        <h2 class="section-title"><i class="fas fa-users"></i> People</h2>
+        <div class="user-grid">
+            {% for profile in profiles %}
+            <div class="user-card glass">
+                <img src="{{ profile.profile_pic.url }}" alt="{{ profile.user.username }}" class="user-card-avatar">
+                <div class="user-card-info">
+                    <h3>@{{ profile.user.username }}</h3>
+                    <p class="text-muted">{{ profile.bio|truncatechars:60 }}</p>
+                </div>
+                <a href="{% url 'profile' profile.user.username %}" class="btn-primary p-05">View Profile</a>
+            </div>
+            {% empty %}
+            <p class="text-muted">No users found matching your search.</p>
+            {% endfor %}
+        </div>
+    </section>
+
+    <!-- ── Vibes Section ────────────────────────────────────────── -->
+    <section class="results-section mt-3">
+        <h2 class="section-title"><i class="fas fa-fire"></i> Vibes</h2>
+        <div class="vibes-grid">
+            {% for post in posts %}
+            <div class="vibe-card glass" onclick="location.href='{% url 'index' %}#post-{{ post.id }}';">
+                {% if post.video %}
+                    <div class="vibe-preview">
+                        <video src="{{ post.video.url }}" muted></video>
+                        <i class="fas fa-play play-overlay"></i>
+                    </div>
+                {% elif post.image %}
+                    <img src="{{ post.image.url }}" alt="Vibe" class="vibe-image">
+                {% else %}
+                    <div class="vibe-text-preview">{{ post.content|truncatechars:100 }}</div>
+                {% endif %}
+                <div class="vibe-card-footer">
+                    <span class="vibe-author">@{{ post.author.username }}</span>
+                    <span class="vibe-engagement"><i class="fas fa-heart"></i> {{ post.likes.count }}</span>
+                </div>
+            </div>
+            {% empty %}
+            <p class="text-muted">No vibes found matching your search.</p>
+            {% endfor %}
+        </div>
+    </section>
+</div>
+
+<style>
+.main-container {
+    max-width: 1000px;
+    margin: 100px auto 50px;
+    padding: 0 1.5rem;
+}
+
+.search-header {
+    margin-bottom: 3rem;
+    text-align: center;
+}
+
+.section-title {
+    font-size: 1.4rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    color: var(--primary);
+}
+
+/* User Grid */
+.user-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.user-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.2rem;
+    border-radius: 15px;
+    transition: transform 0.2s;
+}
+
+.user-card:hover { transform: translateY(-5px); }
+
+.user-card-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--primary);
+}
+
+.user-card-info { flex: 1; min-width: 0; }
+.user-card-info h3 { font-size: 1rem; margin-bottom: 0.2rem; }
+.user-card-info p { font-size: 0.85rem; }
+
+/* Vibes Grid */
+.vibes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.vibe-card {
+    border-radius: 15px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.vibe-card:hover { transform: scale(1.03); }
+
+.vibe-preview {
+    position: relative;
+    aspect-ratio: 9/16;
+    background: #000;
+}
+
+.vibe-preview video { width: 100%; height: 100%; object-fit: cover; }
+
+.play-overlay {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 2rem;
+    opacity: 0.6;
+    color: white;
+}
+
+.vibe-image {
+    width: 100%;
+    aspect-ratio: 9/16;
+    object-fit: cover;
+}
+
+.vibe-text-preview {
+    aspect-ratio: 9/16;
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: var(--gradient-primary);
+    font-size: 0.9rem;
+}
+
+.vibe-card-footer {
+    padding: 0.8rem 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0,0,0,0.4);
+    font-size: 0.8rem;
+}
+
+.mt-3 { margin-top: 3rem; }
+</style>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends 'core/base.html' %}
+{% block title %}Live Streams – VibeNet{% endblock %}
+
+{% block content %}
+<div class="container streams-page">
+    <div class="streams-header">
+        <h2>🔴 Live Now</h2>
+        <a href="{% url 'go_live' %}" class="btn-primary">
+            <i class="fas fa-broadcast-tower"></i> Go Live
+        </a>
+    </div>
+
+    <div class="streams-grid">
+        {% for stream in streams %}
+        <a href="{% url 'watch_stream' stream.id %}" class="stream-card glass">
+            <div class="stream-card-header">
+                <span class="live-badge">● LIVE</span>
+                <span class="viewer-count"><i class="fas fa-eye"></i> {{ stream.viewers.count }}</span>
+            </div>
+            <h3 class="stream-title">{{ stream.title }}</h3>
+            <div class="stream-host">
+                <img src="{{ stream.host.profile.profile_pic.url }}" class="stream-host-avatar" alt="{{ stream.host.username }}">
+                @{{ stream.host.username }}
+            </div>
+            <div class="stream-age">Started {{ stream.started_at|timesince }} ago</div>
+        </a>
+        {% empty %}
+        <div class="glass streams-empty">
+            <div class="streams-empty-icon">📡</div>
+            <p>No one is live right now. Be the first!</p>
+            <a href="{% url 'go_live' %}" class="btn-primary mt-1 d-inline-block">Go Live</a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

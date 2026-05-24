@@ -1,0 +1,71 @@
+{% extends 'core/base.html' %}
+{% load static %}
+{% block title %}{{ profile_user.username }} – VibeNet{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="profile-header glass">
+        <img src="{{ profile_user.profile.profile_pic.url }}" alt="{{ profile_user.username }} avatar" class="profile-avatar">
+        <div class="profile-details">
+            <h1 class="profile-name">{{ profile_user.username }}</h1>
+            <p class="profile-bio">{{ profile_user.profile.bio|default:"No bio yet." }}</p>
+            <div class="stats">
+                <div><strong>{{ posts.count }}</strong> Posts</div>
+                <div><strong>{{ profile_user.profile.followers.count }}</strong> Followers</div>
+                <div><strong>{{ profile_user.profile.following.count }}</strong> Following</div>
+            </div>
+            {% if user.is_authenticated and user != profile_user %}
+                <button id="follow-btn" 
+                        onclick="followUser('{{ profile_user.username }}')" 
+                        class="btn-primary follow-btn {% if user.profile in profile_user.profile.followers.all %}following{% endif %}">
+                    {% if user.profile in profile_user.profile.followers.all %}Unfollow{% else %}Follow{% endif %}
+                </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <h2 class="section-title">Posts</h2>
+    <div class="profile-grid">
+        {% for post in posts %}
+        <div class="post-item glass" onclick="navigateToPost('{{ post.id }}')">
+            {% if post.image %}
+                <img src="{{ post.image.url }}" alt="" class="post-item-media">
+            {% elif post.video %}
+                <video src="{{ post.video.url }}" class="post-item-media"></video>
+            {% else %}
+                <div class="post-item-text">
+                    {{ post.content|truncatechars:100 }}
+                </div>
+            {% endif %}
+        </div>
+        {% empty %}
+        <p>No posts yet.</p>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+function navigateToPost(postId) {
+    window.location.href = `{% url 'index' %}#post-${postId}`;
+}
+
+function followUser(username) {
+    fetch(`/follow/${username}/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        const btn = document.getElementById('follow-btn');
+        if (data.following) {
+            btn.innerText = 'Unfollow';
+            btn.classList.add('following');
+        } else {
+            btn.innerText = 'Follow';
+            btn.classList.remove('following');
+        }
+        location.reload();
+    });
+}
+</script>
+{% endblock %}

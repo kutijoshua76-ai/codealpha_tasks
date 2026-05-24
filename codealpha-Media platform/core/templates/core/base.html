@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% load static %}
+    <meta name="description" content="{% block meta_description %}VibeNet – Share moments, go live, and vibe with your community.{% endblock %}">
+    <title>{% block title %}VibeNet{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=1.4">
+    <link rel="stylesheet" href="{% static 'css/extra.css' %}?v=1.1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    {% block extra_css %}{% endblock %}
+</head>
+<body data-authenticated="{{ user.is_authenticated|yesno:'true,false' }}" data-signup-url="{% url 'signup' %}">
+    <nav>
+        <div class="nav-left">
+            <div class="logo">VibeNet</div>
+            <form action="{% url 'search' %}" method="GET" class="search-form">
+                <i class="fas fa-search search-icon"></i>
+                <input type="text" name="q" placeholder="Search vibes..." class="search-input" aria-label="Search">
+            </form>
+        </div>
+        <div class="nav-links">
+            <a href="{% url 'index' %}"><i class="fas fa-home"></i> Feed</a>
+            <a href="{% url 'streams_list' %}" class="nav-live"><i class="fas fa-broadcast-tower"></i> Live</a>
+            {% if user.is_authenticated %}
+                <a href="{% url 'profile' user.username %}"><i class="fas fa-user"></i> Profile</a>
+                <a href="{% url 'logout' %}"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            {% else %}
+                <a href="{% url 'login' %}">Login</a>
+                <a href="{% url 'signup' %}">Sign Up</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    {% block content %}{% endblock %}
+
+    <script src="{% static 'js/main.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
